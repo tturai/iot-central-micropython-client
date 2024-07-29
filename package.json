@@ -6,8 +6,7 @@
     ["iotc/__init__.py", "github:Azure/iot-central-micropython-client/iotc/__init__.py"]
   ],
   "deps": [
-    ["umqtt.simple", "latest"],
-    ["umqtt.robust", "latest"]
+    ["mqtt_as", "github:peterhinch/micropython-mqtt"]
   ],
   "version": "1.0"
 }
