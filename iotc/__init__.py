@@ -13,7 +13,7 @@ try:
 except:
     import mip
 
-    mip.install('github:peterhinch/micropython-mqtt')
+    mip.install('github:peterhinch/micropython-mqtt/package.json')
     from mqtt_as import MQTTClient, config
 
 gc.collect()
