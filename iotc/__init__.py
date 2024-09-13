@@ -76,7 +76,6 @@ class IoTCClient:
 
     async def _messages(self, client):
         async for topic, msg, retained in client.queue:
-            print((topic, msg, retained))
             topic = topic.decode('utf-8')
             if topic == HubTopics.TWIN_RES.format(200, self._twin_request_id):
                 self._logger.info('Received twin: {}'.format(msg))
@@ -87,7 +86,7 @@ class IoTCClient:
                 self._logger.info(
                     'Received desired property message: {}'.format(msg))
                 message = json.loads(msg.decode('utf-8'))
-                self.on_properties_update(message)
+                await self.on_properties_update(message)
 
             elif topic.startswith(HubTopics.COMMANDS):
                 # commands
@@ -101,7 +100,7 @@ class IoTCClient:
                         command = Command(command_name, command_req)
                         if msg is not None:
                             command.payload = msg
-                        self._on_commands(command)
+                        await self._on_commands(command)
 
             elif topic.startswith(HubTopics.ENQUEUED_COMMANDS.format(self._device_id)):
                 params = topic.split(
@@ -116,7 +115,7 @@ class IoTCClient:
                 command = Command(command_name, None)
                 if msg is not None:
                     command.payload = msg
-                self._on_enqueued_commands(command)
+                await self._on_enqueued_commands(command)
 
     async def _up(self, client):
         while True:
@@ -152,7 +151,7 @@ class IoTCClient:
         asyncio.create_task(self._messages(self._mqtt_client))
 
         self._logger.debug(self._twin_request_id)
-        self._mqtt_client.publish(
+        await self._mqtt_client.publish(
             HubTopics.TWIN_REQ.format(self._twin_request_id).encode('utf-8'), '{{}}')
 
     def is_connected(self):
@@ -163,9 +162,9 @@ class IoTCClient:
     def set_model_id(self, model):
         self._model_id = model
 
-    def send_property(self, payload):
+    async def send_property(self, payload):
         self._logger.debug('Sending properties {}'.format(json.dumps(payload)))
-        self._mqtt_client.publish(
+        await self._mqtt_client.publish(
             HubTopics.PROP_REPORT.format(time()).encode('utf-8'), json.dumps(payload))
 
     async def send_telemetry(self, payload, properties=None):
@@ -183,14 +182,7 @@ class IoTCClient:
     def on(self, event, callback):
         self._events[event] = callback
 
-    def listen(self):
-        if not self.is_connected():
-            return
-        self._mqtt_client.ping()
-        self._mqtt_client.wait_msg()
-        sleep(1)
-
-    def on_properties_update(self, patch):
+    async def on_properties_update(self, patch):
         try:
             prop_cb = self._events[IoTCEvents.PROPERTIES]
         except:
@@ -202,7 +194,7 @@ class IoTCClient:
             ret = prop_cb(prop, patch[prop])
             if ret:
                 self._logger.debug('Acknowledging {}'.format(prop))
-                self.send_property({'{}'.format(prop): patch[prop]})
+                await self.send_property({'{}'.format(prop): patch[prop]})
             else:
                 self._logger.debug(
                     'Property "{}" unsuccessfully processed'.format(prop))
@@ -217,12 +209,12 @@ class IoTCClient:
             }
         })
 
-    def _cmd_ack(self, command: Command):
+    async def _cmd_ack(self, command: Command):
         self._logger.debug('Acknowledging command {}'.format(command.name))
-        self._mqtt_client.publish(
+        await self._mqtt_client.publish(
             '$iothub/methods/res/{}/?$rid={}'.format(200, command.request_id).encode('utf-8'), '')
 
-    def _on_commands(self, command: Command):
+    async def _on_commands(self, command: Command):
         try:
             cmd_cb = self._events[IoTCEvents.COMMANDS]
         except KeyError:
@@ -230,11 +222,11 @@ class IoTCClient:
 
         self._logger.debug(
             'Received command {}'.format(command.name))
-        self._cmd_ack(command)
+        await self._cmd_ack(command)
 
         cmd_cb(command, self._cmd_resp)
 
-    def _on_enqueued_commands(self, command: Command):
+    async def _on_enqueued_commands(self, command: Command):
         try:
             cmd_cb = self._events[IoTCEvents.ENQUEUED_COMMANDS]
         except KeyError:
@@ -242,6 +234,7 @@ class IoTCClient:
 
         self._logger.debug(
             'Received enqueued command {}'.format(command.name))
-        self._cmd_ack(command)
+        await self._cmd_ack(command)
 
         cmd_cb(command)
+
